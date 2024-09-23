@@ -11,7 +11,7 @@ class ResultsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text("Results"),
+        title: const Text("Results"),
         backgroundColor: Colors.blue[800]!,
       ),
       body: Container(
@@ -26,16 +26,16 @@ class ResultsPage extends StatelessWidget {
           future: _fetchAvailabilityData(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
-              return Center(child: CircularProgressIndicator());
+              return const Center(child: CircularProgressIndicator());
             } else if (snapshot.hasError) {
               return Center(child: Text("Error: ${snapshot.error}"));
             } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-              return Center(child: Text("No data available"));
+              return const Center(child: Text("No data available"));
             }
 
             var availabilityMap = calculateAvailability(snapshot.data!);
             return ListView(
-              padding: EdgeInsets.all(16.0),
+              padding: const EdgeInsets.all(16.0),
               children: availabilityMap.entries.map((entry) {
                 String day = entry.key;
                 var slots = entry.value;
@@ -53,18 +53,18 @@ class ResultsPage extends StatelessWidget {
                 }
 
                 return Card(
-                  margin: EdgeInsets.symmetric(vertical: 10.0),
+                  margin: const EdgeInsets.symmetric(vertical: 10.0),
                   child: Padding(
-                    padding: EdgeInsets.all(16.0),
+                    padding: const EdgeInsets.all(16.0),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           day,
-                          style: TextStyle(
+                          style: const TextStyle(
                               fontSize: 24, fontWeight: FontWeight.bold),
                         ),
-                        SizedBox(height: 10),
+                        const SizedBox(height: 10),
                         ...slots.entries.map((slotEntry) {
                           TimeSlot slot = slotEntry.key;
                           List<String> members = slotEntry.value;
@@ -80,7 +80,7 @@ class ResultsPage extends StatelessWidget {
                             decoration: BoxDecoration(
                               color: _getCardColor(),
                               borderRadius: BorderRadius.circular(8.0),
-                              boxShadow: [
+                              boxShadow: const [
                                 BoxShadow(
                                   color: Colors.black26,
                                   blurRadius: 5.0,
@@ -101,47 +101,66 @@ class ResultsPage extends StatelessWidget {
                                       children: [
                                         Text(
                                           "Slot: $formattedStartTime to $formattedEndTime",
-                                          style: TextStyle(fontSize: 16),
+                                          style: const TextStyle(fontSize: 16),
                                         ),
-                                        SizedBox(height: 4),
-                                        Text(
+                                        const SizedBox(height: 4),
+                                        const Text(
                                           "Available: ",
                                           style: TextStyle(fontSize: 16),
                                         ),
                                         Text(
                                           "$availableCount/$totalMembers",
-                                          style: TextStyle(
+                                          style: const TextStyle(
                                               fontSize: 16,
                                               fontWeight: FontWeight.bold),
                                         ),
-                                        SizedBox(height: 4),
+                                        const SizedBox(height: 4),
                                         Text(
                                           "Members: ${members.join(', ')}",
-                                          style: TextStyle(fontSize: 16),
+                                          style: const TextStyle(fontSize: 16),
                                         ),
                                       ],
                                     ),
                                   ),
                                   // Show tick icon if this slot has the maximum available members
                                   if (slot == bestSlot)
-                                    Container(
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        color: Colors.green,
-                                      ),
-                                      child: Padding(
-                                        padding: const EdgeInsets.all(8.0),
-                                        child: Icon(
-                                          Icons.check,
-                                          color: Colors.white,
+                                    CircleAvatar(
+                                      radius: 30,
+                                      backgroundColor: Colors.grey[800],
+                                      child: Container(
+                                        decoration: const BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: Colors.green,
+                                        ),
+                                        child: const Padding(
+                                          padding: EdgeInsets.all(8.0),
+                                          child: Icon(
+                                            Icons.check,
+                                            color: Colors.white,
+                                          ),
                                         ),
                                       ),
                                     ),
+                                  const SizedBox(width: 10),
+                                  // Clock arc showing availability
+                                  Container(
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: Colors.grey[800],
+                                    ),
+                                    child: CustomPaint(
+                                      size: Size(60, 60),
+                                      painter: ArcPainter(
+                                        startTime: slot.startTime,
+                                        endTime: slot.endTime,
+                                      ),
+                                    ),
+                                  ),
                                 ],
                               ),
                             ),
                           );
-                        }).toList(),
+                        }),
                       ],
                     ),
                   ),
@@ -227,6 +246,62 @@ class ResultsPage extends StatelessWidget {
     }
 
     return availabilityMap;
+  }
+}
+
+class ArcPainter extends CustomPainter {
+  final Duration startTime;
+  final Duration endTime;
+
+  ArcPainter({required this.startTime, required this.endTime});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    double radius = size.width / 2;
+    double centerX = radius;
+    double centerY = radius;
+
+    // Convert Duration to radians for the arc
+    double startAngle = _getRadians(startTime);
+    double sweepAngle = _getRadians(endTime) - startAngle;
+
+    Paint arcPaint = Paint()
+      ..color = Colors.green
+      ..style = PaintingStyle.fill;
+
+    // Draw the pizza slice arc
+    canvas.drawArc(
+      Rect.fromCircle(center: Offset(centerX, centerY), radius: radius),
+      startAngle,
+      sweepAngle,
+      true,
+      arcPaint,
+    );
+
+    // Draw clock ticks
+    Paint tickPaint = Paint()..color = Colors.white;
+
+    // Large ticks
+    for (int i = 0; i < 12; i++) {
+      double angle = (i / 12) * 2 * pi; // Angle for each hour
+      double startX = centerX + (radius - 10) * cos(angle);
+      double startY = centerY + (radius - 10) * sin(angle);
+      double endX = centerX + radius * cos(angle);
+      double endY = centerY + radius * sin(angle);
+      canvas.drawLine(Offset(startX, startY), Offset(endX, endY), tickPaint);
+    }
+  }
+
+  double _getRadians(Duration time) {
+    double hours = time.inHours.toDouble();
+    double minutes = time.inMinutes.remainder(60) / 60;
+    double totalHours = hours + minutes;
+    return (totalHours / 12) * (2 * pi) - pi / 2; // Convert to radians
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) {
+    return false;
   }
 }
 
