@@ -94,31 +94,33 @@ class ResultsPage extends StatelessWidget {
                                 mainAxisAlignment:
                                     MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        "Slot: $formattedStartTime to $formattedEndTime",
-                                        style: TextStyle(fontSize: 16),
-                                      ),
-                                      SizedBox(height: 4),
-                                      Text(
-                                        "Available: ",
-                                        style: TextStyle(fontSize: 16),
-                                      ),
-                                      Text(
-                                        "$availableCount/$totalMembers",
-                                        style: TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold),
-                                      ),
-                                      SizedBox(height: 4),
-                                      Text(
-                                        "Members: ${members.join(', ')}",
-                                        style: TextStyle(fontSize: 16),
-                                      ),
-                                    ],
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          "Slot: $formattedStartTime to $formattedEndTime",
+                                          style: TextStyle(fontSize: 16),
+                                        ),
+                                        SizedBox(height: 4),
+                                        Text(
+                                          "Available: ",
+                                          style: TextStyle(fontSize: 16),
+                                        ),
+                                        Text(
+                                          "$availableCount/$totalMembers",
+                                          style: TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.bold),
+                                        ),
+                                        SizedBox(height: 4),
+                                        Text(
+                                          "Members: ${members.join(', ')}",
+                                          style: TextStyle(fontSize: 16),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                   // Show tick icon if this slot has the maximum available members
                                   if (slot == bestSlot)
