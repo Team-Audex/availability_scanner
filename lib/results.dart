@@ -1,19 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+class MemberAvailability {
+  final String name;
+  final String day;
+  final String startTime;
+  final String endTime;
+
+  MemberAvailability(this.name, this.day, this.startTime, this.endTime);
+}
+
 class ResultsPage extends StatelessWidget {
   final supabase = Supabase.instance.client;
 
   ResultsPage({super.key});
 
-  Future<Map<String, List<List<TimeOfDay>>>> _fetchCommonAvailability() async {
+  Future<Map<String, Map<String, List<Map<String, dynamic>>>>>
+      _fetchCommonAvailability() async {
     final data = await supabase.from('free_times').select();
-
-    print(data);
-
-    if (data.isEmpty) {
-      return {}; // Return an empty map if there are no entries
-    }
 
     Map<String, Map<String, List<List<TimeOfDay>>>> userAvailabilities = {};
 
@@ -34,14 +38,7 @@ class ResultsPage extends StatelessWidget {
       userAvailabilities[name]![day]!.add([start, end]);
     }
 
-    List<Map<String, List<List<TimeOfDay>>>> userAvailabilitiesList =
-        userAvailabilities.values.map((user) => user).toList();
-
-    if (userAvailabilitiesList.isEmpty) {
-      return {}; // Return an empty map if no user availabilities were found
-    }
-
-    return findCommonAvailability(userAvailabilitiesList);
+    return findCommonAvailability(userAvailabilities);
   }
 
   TimeOfDay _parseTime(String time) {
@@ -49,7 +46,6 @@ class ResultsPage extends StatelessWidget {
     return TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
   }
 
-  @override
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -73,7 +69,8 @@ class ResultsPage extends StatelessWidget {
             colors: [Colors.blue[900]!, Colors.black],
           ),
         ),
-        child: FutureBuilder<Map<String, List<List<TimeOfDay>>>>(
+        child:
+            FutureBuilder<Map<String, Map<String, List<Map<String, dynamic>>>>>(
           future: _fetchCommonAvailability(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
@@ -100,7 +97,9 @@ class ResultsPage extends StatelessWidget {
               padding: const EdgeInsets.all(16.0),
               children: commonAvailability.entries.map((entry) {
                 final day = entry.key;
-                final times = entry.value;
+                final slots =
+                    entry.value['commonSlots'] as List<Map<String, dynamic>>;
+
                 return Card(
                   margin: const EdgeInsets.symmetric(vertical: 8.0),
                   color: Colors.blue[800],
@@ -118,15 +117,41 @@ class ResultsPage extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 8.0),
-                        ...times.map((timeRange) {
-                          return Text(
-                            '${_formatTime(timeRange[0])} - ${_formatTime(timeRange[1])}',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 20,
-                            ),
+                        ...slots.map((slot) {
+                          final time =
+                              '${_formatTime(slot['start'])} - ${_formatTime(slot['end'])}';
+                          final members =
+                              (slot['members'] as List<String>).join(', ');
+                          final count =
+                              '${slot['count']}/${slot['total']} members';
+
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                time,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 20,
+                                ),
+                              ),
+                              Text(
+                                'Members: $members',
+                                style: const TextStyle(
+                                  color: Colors.white70,
+                                ),
+                              ),
+                              Text(
+                                count,
+                                style: const TextStyle(
+                                  color: Colors.white70,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 8.0),
+                            ],
                           );
-                        }).toList(),
+                        }),
                       ],
                     ),
                   ),
@@ -175,40 +200,60 @@ class ResultsPage extends StatelessWidget {
     return [overlapStart, overlapEnd];
   }
 
-  Map<String, List<List<TimeOfDay>>> findCommonAvailability(
-      List<Map<String, List<List<TimeOfDay>>>> userAvailabilities) {
-    Map<String, List<List<TimeOfDay>>> commonAvailability = {};
+  Map<String, Map<String, List<Map<String, dynamic>>>> findCommonAvailability(
+      Map<String, Map<String, List<List<TimeOfDay>>>> userAvailabilities) {
+    Map<String, Map<String, List<Map<String, dynamic>>>> result = {};
 
-    for (String day in userAvailabilities.first.keys) {
-      List<List<TimeOfDay>> commonIntervals =
-          userAvailabilities.first[day] ?? [];
+    // Get all possible days
+    final days = userAvailabilities.values.first.keys.toList();
 
-      for (int i = 1; i < userAvailabilities.length; i++) {
-        Map<String, List<List<TimeOfDay>>> nextUser = userAvailabilities[i];
-        List<List<TimeOfDay>> nextUserIntervals = nextUser[day] ?? [];
+    for (String day in days) {
+      List<List<TimeOfDay>> allTimeSlots = [];
 
-        List<List<TimeOfDay>> newCommonIntervals = [];
-
-        for (var interval1 in commonIntervals) {
-          for (var interval2 in nextUserIntervals) {
-            var overlap = findOverlap(
-                interval1[0], interval1[1], interval2[0], interval2[1]);
-            if (overlap.isNotEmpty) {
-              newCommonIntervals.add(overlap);
-            }
+      // Collect all time slots for that day
+      userAvailabilities.forEach((name, availabilities) {
+        final timeSlots = availabilities[day];
+        if (timeSlots != null) {
+          for (var timeSlot in timeSlots) {
+            allTimeSlots.add(timeSlot);
           }
         }
+      });
 
-        commonIntervals = newCommonIntervals;
+      // Find the common overlapping times for groups of users
+      List<Map<String, dynamic>> commonSlots = [];
 
-        if (commonIntervals.isEmpty) break;
+      for (var i = 0; i < allTimeSlots.length; i++) {
+        List<String> availableMembers = [];
+        TimeOfDay start = allTimeSlots[i][0];
+        TimeOfDay end = allTimeSlots[i][1];
+
+        userAvailabilities.forEach((name, availabilities) {
+          if (availabilities[day] != null) {
+            for (var timeSlot in availabilities[day]!) {
+              if (timeOverlap(start, end, timeSlot[0], timeSlot[1])) {
+                availableMembers.add(name);
+              }
+            }
+          }
+        });
+
+        if (availableMembers.isNotEmpty) {
+          commonSlots.add({
+            'start': start,
+            'end': end,
+            'members': availableMembers,
+            'count': availableMembers.length,
+            'total': userAvailabilities.keys.length
+          });
+        }
       }
 
-      if (commonIntervals.isNotEmpty) {
-        commonAvailability[day] = commonIntervals;
+      if (commonSlots.isNotEmpty) {
+        result[day] = {'commonSlots': commonSlots};
       }
     }
 
-    return commonAvailability;
+    return result;
   }
 }

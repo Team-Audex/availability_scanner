@@ -42,6 +42,7 @@ class _EntriesScreenState extends State<EntriesScreen> {
         _isLoading = false;
       });
     } catch (error) {
+      // ignore: use_build_context_synchronously
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error fetching entries: $error')),
       );
