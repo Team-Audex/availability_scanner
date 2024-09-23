@@ -7,7 +7,6 @@ class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
   @override
-  // ignore: library_private_types_in_public_api
   _HomePageState createState() => _HomePageState();
 }
 
@@ -39,8 +38,10 @@ class _HomePageState extends State<HomePage> {
                 const SizedBox(height: 20),
                 _buildNameInputField(context),
                 const SizedBox(height: 20),
-                ElevatedButton(
-                  onPressed: () {
+                _buildGradientButton(
+                  context,
+                  'Show the Results',
+                  () {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
@@ -48,26 +49,19 @@ class _HomePageState extends State<HomePage> {
                       ),
                     );
                   },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue[900],
-                  ),
-                  child: const Text('Show the Results'),
                 ),
                 const SizedBox(height: 10), // Add space between buttons
-                ElevatedButton(
-                  onPressed: () {
+                _buildGradientButton(
+                  context,
+                  'Show All Entries',
+                  () {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) =>
-                            const EntriesScreen(), // Navigate to EntriesScreen
+                        builder: (context) => const EntriesScreen(),
                       ),
                     );
                   },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue[900],
-                  ),
-                  child: const Text('Show All Entries'),
                 ),
               ],
             ),
@@ -124,6 +118,40 @@ class _HomePageState extends State<HomePage> {
       style: const TextStyle(color: Colors.white),
       textAlign: TextAlign.center,
       onSubmitted: (_) => _navigateToTimeSelection(),
+    );
+  }
+
+  Widget _buildGradientButton(
+      BuildContext context, String text, VoidCallback onPressed) {
+    return Container(
+      width: double.infinity,
+      height: 60,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Colors.blue[700]!, Colors.blue[900]!],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(30),
+      ),
+      child: ElevatedButton(
+        onPressed: onPressed,
+        style: ElevatedButton.styleFrom(
+          backgroundColor:
+              Colors.transparent, // Make button background transparent
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(30),
+          ),
+        ),
+        child: Text(
+          text,
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
+      ),
     );
   }
 

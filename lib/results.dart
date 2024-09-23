@@ -1,157 +1,145 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-
-class MemberAvailability {
-  final String name;
-  final String day;
-  final String startTime;
-  final String endTime;
-
-  MemberAvailability(this.name, this.day, this.startTime, this.endTime);
-}
+import 'dart:math';
 
 class ResultsPage extends StatelessWidget {
   final supabase = Supabase.instance.client;
 
   ResultsPage({super.key});
 
-  Future<Map<String, Map<String, List<Map<String, dynamic>>>>>
-      _fetchCommonAvailability() async {
-    final data = await supabase.from('free_times').select();
-
-    Map<String, Map<String, List<List<TimeOfDay>>>> userAvailabilities = {};
-
-    for (var entry in data) {
-      String name = entry['name'];
-      String day = entry['day'];
-      TimeOfDay start = _parseTime(entry['start_time']);
-      TimeOfDay end = _parseTime(entry['end_time']);
-
-      if (!userAvailabilities.containsKey(name)) {
-        userAvailabilities[name] = {};
-      }
-
-      if (!userAvailabilities[name]!.containsKey(day)) {
-        userAvailabilities[name]![day] = [];
-      }
-
-      userAvailabilities[name]![day]!.add([start, end]);
-    }
-
-    return findCommonAvailability(userAvailabilities);
-  }
-
-  TimeOfDay _parseTime(String time) {
-    final parts = time.split(':');
-    return TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Common Availability'),
-        flexibleSpace: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Colors.blue[900]!, Colors.black],
-            ),
-          ),
-        ),
+        title: Text("Results"),
+        backgroundColor: Colors.blue[800]!,
       ),
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
+            colors: [Colors.blue[800]!, Colors.black],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Colors.blue[900]!, Colors.black],
           ),
         ),
-        child:
-            FutureBuilder<Map<String, Map<String, List<Map<String, dynamic>>>>>(
-          future: _fetchCommonAvailability(),
+        child: FutureBuilder<List<MemberAvailability>>(
+          future: _fetchAvailabilityData(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
+              return Center(child: CircularProgressIndicator());
+            } else if (snapshot.hasError) {
+              return Center(child: Text("Error: ${snapshot.error}"));
+            } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+              return Center(child: Text("No data available"));
             }
 
-            if (snapshot.hasError) {
-              return Center(
-                child: Text('Error: ${snapshot.error}',
-                    style: const TextStyle(color: Colors.red)),
-              );
-            }
-
-            if (!snapshot.hasData || snapshot.data!.isEmpty) {
-              return const Center(
-                child: Text('No available times found yet.',
-                    style: TextStyle(color: Colors.white)),
-              );
-            }
-
-            final commonAvailability = snapshot.data!;
-
+            var availabilityMap = calculateAvailability(snapshot.data!);
             return ListView(
-              padding: const EdgeInsets.all(16.0),
-              children: commonAvailability.entries.map((entry) {
-                final day = entry.key;
-                final slots =
-                    entry.value['commonSlots'] as List<Map<String, dynamic>>;
+              padding: EdgeInsets.all(16.0),
+              children: availabilityMap.entries.map((entry) {
+                String day = entry.key;
+                var slots = entry.value;
+
+                // Find the slot with the maximum available members
+                TimeSlot? bestSlot;
+                int maxAvailable = 0;
+
+                for (var slotEntry in slots.entries) {
+                  int availableCount = slotEntry.value.length;
+                  if (availableCount > maxAvailable) {
+                    maxAvailable = availableCount;
+                    bestSlot = slotEntry.key;
+                  }
+                }
 
                 return Card(
-                  margin: const EdgeInsets.symmetric(vertical: 8.0),
-                  color: Colors.blue[800],
+                  margin: EdgeInsets.symmetric(vertical: 10.0),
                   child: Padding(
-                    padding: const EdgeInsets.all(16.0),
+                    padding: EdgeInsets.all(16.0),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           day,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                          ),
+                          style: TextStyle(
+                              fontSize: 24, fontWeight: FontWeight.bold),
                         ),
-                        const SizedBox(height: 8.0),
-                        ...slots.map((slot) {
-                          final time =
-                              '${_formatTime(slot['start'])} - ${_formatTime(slot['end'])}';
-                          final members =
-                              (slot['members'] as List<String>).join(', ');
-                          final count =
-                              '${slot['count']}/${slot['total']} members';
+                        SizedBox(height: 10),
+                        ...slots.entries.map((slotEntry) {
+                          TimeSlot slot = slotEntry.key;
+                          List<String> members = slotEntry.value;
+                          int availableCount = members.length;
+                          int totalMembers = 4; // Adjust this as needed
 
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                time,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 20,
+                          String formattedStartTime =
+                              _formatTime(slot.startTime);
+                          String formattedEndTime = _formatTime(slot.endTime);
+
+                          return Container(
+                            margin: const EdgeInsets.symmetric(vertical: 8.0),
+                            decoration: BoxDecoration(
+                              color: _getCardColor(),
+                              borderRadius: BorderRadius.circular(8.0),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black26,
+                                  blurRadius: 5.0,
+                                  offset: Offset(2, 2),
                                 ),
+                              ],
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(16.0),
+                              child: Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        "Slot: $formattedStartTime to $formattedEndTime",
+                                        style: TextStyle(fontSize: 16),
+                                      ),
+                                      SizedBox(height: 4),
+                                      Text(
+                                        "Available: ",
+                                        style: TextStyle(fontSize: 16),
+                                      ),
+                                      Text(
+                                        "$availableCount/$totalMembers",
+                                        style: TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold),
+                                      ),
+                                      SizedBox(height: 4),
+                                      Text(
+                                        "Members: ${members.join(', ')}",
+                                        style: TextStyle(fontSize: 16),
+                                      ),
+                                    ],
+                                  ),
+                                  // Show tick icon if this slot has the maximum available members
+                                  if (slot == bestSlot)
+                                    Container(
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: Colors.green,
+                                      ),
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(8.0),
+                                        child: Icon(
+                                          Icons.check,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ),
+                                ],
                               ),
-                              Text(
-                                'Members: $members',
-                                style: const TextStyle(
-                                  color: Colors.white70,
-                                ),
-                              ),
-                              Text(
-                                count,
-                                style: const TextStyle(
-                                  color: Colors.white70,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const SizedBox(height: 8.0),
-                            ],
+                            ),
                           );
-                        }),
+                        }).toList(),
                       ],
                     ),
                   ),
@@ -164,96 +152,93 @@ class ResultsPage extends StatelessWidget {
     );
   }
 
-  String _formatTime(TimeOfDay time) {
-    final hour =
-        time.hour % 12 == 0 ? 12 : time.hour % 12; // Convert to 12-hour format
-    final minute = time.minute.toString().padLeft(2, '0');
-    final amPm = time.hour >= 12 ? 'PM' : 'AM';
-    return '$hour:$minute $amPm';
-  }
+  Future<List<MemberAvailability>> _fetchAvailabilityData() async {
+    final data = await supabase.from('free_times').select();
 
-  bool timeOverlap(
-      TimeOfDay start1, TimeOfDay end1, TimeOfDay start2, TimeOfDay end2) {
-    int start1Minutes = start1.hour * 60 + start1.minute;
-    int end1Minutes = end1.hour * 60 + end1.minute;
-    int start2Minutes = start2.hour * 60 + start2.minute;
-    int end2Minutes = end2.hour * 60 + end2.minute;
+    List<MemberAvailability> members = [];
+    for (var entry in data) {
+      String name = entry['name'];
+      String day = entry['day'];
+      String startTimeStr = entry['start_time'];
+      String endTimeStr = entry['end_time'];
 
-    return start1Minutes < end2Minutes && start2Minutes < end1Minutes;
-  }
+      Duration startTime = _parseTime(startTimeStr);
+      Duration endTime = _parseTime(endTimeStr);
 
-  List<TimeOfDay> findOverlap(
-      TimeOfDay start1, TimeOfDay end1, TimeOfDay start2, TimeOfDay end2) {
-    if (!timeOverlap(start1, end1, start2, end2)) {
-      return []; // No overlap
-    }
+      var member = members.firstWhere(
+        (m) => m.name == name,
+        orElse: () => MemberAvailability(name, []),
+      );
 
-    TimeOfDay overlapStart =
-        (start1.hour * 60 + start1.minute) > (start2.hour * 60 + start2.minute)
-            ? start1
-            : start2;
-    TimeOfDay overlapEnd =
-        (end1.hour * 60 + end1.minute) < (end2.hour * 60 + end2.minute)
-            ? end1
-            : end2;
-
-    return [overlapStart, overlapEnd];
-  }
-
-  Map<String, Map<String, List<Map<String, dynamic>>>> findCommonAvailability(
-      Map<String, Map<String, List<List<TimeOfDay>>>> userAvailabilities) {
-    Map<String, Map<String, List<Map<String, dynamic>>>> result = {};
-
-    // Get all possible days
-    final days = userAvailabilities.values.first.keys.toList();
-
-    for (String day in days) {
-      List<List<TimeOfDay>> allTimeSlots = [];
-
-      // Collect all time slots for that day
-      userAvailabilities.forEach((name, availabilities) {
-        final timeSlots = availabilities[day];
-        if (timeSlots != null) {
-          for (var timeSlot in timeSlots) {
-            allTimeSlots.add(timeSlot);
-          }
-        }
-      });
-
-      // Find the common overlapping times for groups of users
-      List<Map<String, dynamic>> commonSlots = [];
-
-      for (var i = 0; i < allTimeSlots.length; i++) {
-        List<String> availableMembers = [];
-        TimeOfDay start = allTimeSlots[i][0];
-        TimeOfDay end = allTimeSlots[i][1];
-
-        userAvailabilities.forEach((name, availabilities) {
-          if (availabilities[day] != null) {
-            for (var timeSlot in availabilities[day]!) {
-              if (timeOverlap(start, end, timeSlot[0], timeSlot[1])) {
-                availableMembers.add(name);
-              }
-            }
-          }
-        });
-
-        if (availableMembers.isNotEmpty) {
-          commonSlots.add({
-            'start': start,
-            'end': end,
-            'members': availableMembers,
-            'count': availableMembers.length,
-            'total': userAvailabilities.keys.length
-          });
-        }
+      if (!members.contains(member)) {
+        members.add(member);
       }
 
-      if (commonSlots.isNotEmpty) {
-        result[day] = {'commonSlots': commonSlots};
+      member.timeSlots.add(TimeSlot(day, startTime, endTime));
+    }
+    return members;
+  }
+
+  Duration _parseTime(String timeStr) {
+    final parts = timeStr.split(':');
+    return Duration(hours: int.parse(parts[0]), minutes: int.parse(parts[1]));
+  }
+
+  String _formatTime(Duration time) {
+    int hours = time.inHours % 12;
+    int minutes = time.inMinutes.remainder(60);
+    String period = time.inHours >= 12 ? 'PM' : 'AM';
+    return '${hours == 0 ? 12 : hours}:${minutes.toString().padLeft(2, '0')} $period';
+  }
+
+  Color _getCardColor() {
+    // Generate a random color for the card
+    Random random = Random();
+    return Color.fromARGB(
+      255,
+      random.nextInt(256),
+      random.nextInt(256),
+      random.nextInt(256),
+    ).withOpacity(0.7);
+  }
+
+  Map<String, Map<TimeSlot, List<String>>> calculateAvailability(
+      List<MemberAvailability> members) {
+    Map<String, Map<TimeSlot, List<String>>> availabilityMap = {};
+
+    for (var member in members) {
+      for (var timeSlot in member.timeSlots) {
+        availabilityMap.putIfAbsent(timeSlot.day, () => {});
+        var daySlots = availabilityMap[timeSlot.day]!;
+
+        for (var currentSlot in daySlots.keys) {
+          if (timeSlot.startTime.inMinutes < currentSlot.endTime.inMinutes &&
+              timeSlot.endTime.inMinutes > currentSlot.startTime.inMinutes) {
+            daySlots[currentSlot]!.add(member.name);
+          }
+        }
+
+        if (!daySlots.containsKey(timeSlot)) {
+          daySlots[timeSlot] = [member.name];
+        }
       }
     }
 
-    return result;
+    return availabilityMap;
   }
+}
+
+class TimeSlot {
+  final String day;
+  final Duration startTime;
+  final Duration endTime;
+
+  TimeSlot(this.day, this.startTime, this.endTime);
+}
+
+class MemberAvailability {
+  final String name;
+  final List<TimeSlot> timeSlots;
+
+  MemberAvailability(this.name, this.timeSlots);
 }
