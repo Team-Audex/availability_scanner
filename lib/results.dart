@@ -337,7 +337,7 @@ Duration _slotsOverlap(TimeSlot slot1, TimeSlot slot2) {
   if ((slot1.endTime > slot2.startTime && slot1.startTime < slot2.endTime) ||
       (slot2.endTime > slot1.startTime && slot2.startTime < slot1.endTime)) {
     // Case 1: One slot is completely inside the other
-    if (slot1.startTime > slot2.startTime && slot1.endTime < slot2.endTime) {
+    if (slot1.startTime >= slot2.startTime && slot1.endTime <= slot2.endTime) {
       return (slot1.endTime - slot1.startTime);
     } else if (slot2.startTime > slot1.startTime &&
         slot2.endTime < slot1.endTime) {
@@ -347,10 +347,10 @@ Duration _slotsOverlap(TimeSlot slot1, TimeSlot slot2) {
     // Case 2: Partial overlap
     if (slot2.endTime >= slot1.endTime) {
       // Slot2 comes after Slot1
-      return (slot2.startTime - slot1.endTime).abs();
+      return (slot1.endTime - slot2.startTime);
     } else {
       // Slot1 comes after Slot2
-      return (slot2.endTime - slot1.startTime).abs();
+      return (slot2.endTime - slot1.startTime);
     }
   }
 
