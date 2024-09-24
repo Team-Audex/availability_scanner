@@ -336,11 +336,35 @@ Duration _slotsOverlap(TimeSlot slot1, TimeSlot slot2) {
   // Check if there's an intersection at all
   if ((slot1.endTime > slot2.startTime && slot1.startTime < slot2.endTime) ||
       (slot2.endTime > slot1.startTime && slot2.startTime < slot1.endTime)) {
+    print([
+      "INTERSECTION",
+      slot1.startTime,
+      slot1.endTime,
+      slot2.startTime,
+      slot2.endTime
+    ]);
+
     // Case 1: One slot is completely inside the other
     if (slot1.startTime > slot2.startTime && slot1.endTime < slot2.endTime) {
+      print([
+        "CASE 1",
+        slot1.startTime,
+        slot1.endTime,
+        slot2.startTime,
+        slot2.endTime
+      ]);
+
       return (slot1.endTime - slot1.startTime);
-    } else if (slot2.startTime < slot1.startTime &&
-        slot2.endTime > slot1.endTime) {
+    } else if (slot2.startTime > slot1.startTime &&
+        slot2.endTime < slot1.endTime) {
+      print([
+        "CASE 2",
+        slot1.startTime,
+        slot1.endTime,
+        slot2.startTime,
+        slot2.endTime
+      ]);
+
       return (slot2.endTime - slot2.startTime);
     }
 
