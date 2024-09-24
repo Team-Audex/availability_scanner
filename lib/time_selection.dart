@@ -28,6 +28,33 @@ class _TimeSelectionPageState extends State<TimeSelectionPage> {
   };
 
   bool _isLoading = false; // Loading state
+  late Future<void> _fetchAvailabilityFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchAvailabilityFuture = _fetchExistingAvailability();
+  }
+
+  Future<void> _fetchExistingAvailability() async {
+    final data =
+        await supabase.from('free_times').select().eq('name', widget.userName);
+
+    for (var entry in data) {
+      String day = entry['day'];
+      TimeOfDay start = _parseTime(entry['start_time']);
+      TimeOfDay end = _parseTime(entry['end_time']);
+
+      if (_availability.containsKey(day)) {
+        _availability[day]!.add(TimeOfDayRange(start: start, end: end));
+      }
+    }
+  }
+
+  TimeOfDay _parseTime(String time) {
+    final parts = time.split(':');
+    return TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -56,44 +83,60 @@ class _TimeSelectionPageState extends State<TimeSelectionPage> {
             ],
           ),
         ),
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            children: [
-              Text(
-                'Hello, ${widget.userName}',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                ),
+        child: FutureBuilder<void>(
+          future: _fetchAvailabilityFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            if (snapshot.hasError) {
+              return Center(
+                child: Text('Error fetching availability: ${snapshot.error}',
+                    style: const TextStyle(color: Colors.red)),
+              );
+            }
+
+            return Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                children: [
+                  Text(
+                    'Hello, ${widget.userName}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Expanded(
+                    child: GridView.extent(
+                      maxCrossAxisExtent: 400,
+                      children: _availability.keys.map((day) {
+                        return _buildDayColumn(day);
+                      }).toList(),
+                    ),
+                  ),
+                  ElevatedButton(
+                    onPressed: _isLoading ? null : _submitAvailability,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue[900],
+                    ),
+                    child: _isLoading
+                        ? const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 5),
+                            child: CircularProgressIndicator(
+                              valueColor:
+                                  AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : const Text('Finish'),
+                  ),
+                ],
               ),
-              const SizedBox(height: 20),
-              Expanded(
-                child: GridView.extent(
-                  maxCrossAxisExtent: 400,
-                  children: _availability.keys.map((day) {
-                    return _buildDayColumn(day);
-                  }).toList(),
-                ),
-              ),
-              ElevatedButton(
-                onPressed: _isLoading ? null : _submitAvailability,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue[900],
-                ),
-                child: _isLoading
-                    ? const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 5),
-                        child: CircularProgressIndicator(
-                          valueColor:
-                              AlwaysStoppedAnimation<Color>(Colors.white),
-                        ),
-                      )
-                    : const Text('Finish'),
-              ),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );
@@ -210,6 +253,9 @@ class _TimeSelectionPageState extends State<TimeSelectionPage> {
     });
 
     try {
+      // Clear previous entries for this user
+      await supabase.from('free_times').delete().eq('name', widget.userName);
+
       for (var entry in _availability.entries) {
         final day = entry.key;
         final times = entry.value;

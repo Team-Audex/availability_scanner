@@ -12,7 +12,15 @@ class ResultsPage extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text("Results"),
-        backgroundColor: Colors.blue[800]!,
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Colors.blue[900]!, Colors.black],
+            ),
+          ),
+        ),
       ),
       body: Container(
         decoration: BoxDecoration(
@@ -22,7 +30,7 @@ class ResultsPage extends StatelessWidget {
             end: Alignment.bottomRight,
           ),
         ),
-        child: FutureBuilder<List<MemberAvailability>>(
+        child: FutureBuilder<Map<String, List<TimeSlot>>>(
           future: _fetchAvailabilityData(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
@@ -34,6 +42,8 @@ class ResultsPage extends StatelessWidget {
             }
 
             var availabilityMap = calculateAvailability(snapshot.data!);
+            int totalMembers = _calculateTotalMembers(snapshot.data!);
+
             return ListView(
               padding: const EdgeInsets.all(16.0),
               children: availabilityMap.entries.map((entry) {
@@ -67,9 +77,8 @@ class ResultsPage extends StatelessWidget {
                         const SizedBox(height: 10),
                         ...slots.entries.map((slotEntry) {
                           TimeSlot slot = slotEntry.key;
-                          List<String> members = slotEntry.value;
-                          int availableCount = members.length;
-                          int totalMembers = 4; // Adjust this as needed
+                          Map<String, Duration> members = slotEntry.value;
+                          int availableCount = members.keys.toList().length;
 
                           String formattedStartTime =
                               _formatTime(slot.startTime);
@@ -115,10 +124,18 @@ class ResultsPage extends StatelessWidget {
                                               fontWeight: FontWeight.bold),
                                         ),
                                         const SizedBox(height: 4),
-                                        Text(
-                                          "Members: ${members.join(', ')}",
-                                          style: const TextStyle(fontSize: 16),
-                                        ),
+                                        ...List.generate(
+                                          members.length,
+                                          (index) {
+                                            String name =
+                                                members.keys.toList()[index];
+                                            return Text(
+                                              "$name: ${_formatDuration(members[name]!)}",
+                                              style:
+                                                  const TextStyle(fontSize: 16),
+                                            );
+                                          },
+                                        )
                                       ],
                                     ),
                                   ),
@@ -143,16 +160,20 @@ class ResultsPage extends StatelessWidget {
                                     ),
                                   const SizedBox(width: 10),
                                   // Clock arc showing availability
-                                  Container(
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      color: Colors.grey[800],
-                                    ),
-                                    child: CustomPaint(
-                                      size: Size(60, 60),
-                                      painter: ArcPainter(
-                                        startTime: slot.startTime,
-                                        endTime: slot.endTime,
+                                  CircleAvatar(
+                                    radius: 32,
+                                    backgroundColor: Colors.white,
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: Colors.grey[800],
+                                      ),
+                                      child: CustomPaint(
+                                        size: const Size(60, 60),
+                                        painter: ArcPainter(
+                                          startTime: slot.startTime,
+                                          endTime: slot.endTime,
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -173,10 +194,12 @@ class ResultsPage extends StatelessWidget {
     );
   }
 
-  Future<List<MemberAvailability>> _fetchAvailabilityData() async {
+  Future<Map<String, List<TimeSlot>>> _fetchAvailabilityData() async {
     final data = await supabase.from('free_times').select();
 
-    List<MemberAvailability> members = [];
+    // Create a map organized by day with a list of time slots
+    Map<String, List<TimeSlot>> daySlotsMap = {};
+
     for (var entry in data) {
       String name = entry['name'];
       String day = entry['day'];
@@ -186,18 +209,14 @@ class ResultsPage extends StatelessWidget {
       Duration startTime = _parseTime(startTimeStr);
       Duration endTime = _parseTime(endTimeStr);
 
-      var member = members.firstWhere(
-        (m) => m.name == name,
-        orElse: () => MemberAvailability(name, []),
-      );
+      TimeSlot timeSlot = TimeSlot(day, startTime, endTime, name);
 
-      if (!members.contains(member)) {
-        members.add(member);
-      }
-
-      member.timeSlots.add(TimeSlot(day, startTime, endTime));
+      // Add the time slot to the appropriate day
+      daySlotsMap.putIfAbsent(day, () => []);
+      daySlotsMap[day]!.add(timeSlot);
     }
-    return members;
+
+    return daySlotsMap;
   }
 
   Duration _parseTime(String timeStr) {
@@ -217,36 +236,126 @@ class ResultsPage extends StatelessWidget {
     Random random = Random();
     return Color.fromARGB(
       255,
-      random.nextInt(256),
-      random.nextInt(256),
-      random.nextInt(256),
+      random.nextInt(100),
+      random.nextInt(100),
+      random.nextInt(100),
     ).withOpacity(0.7);
   }
 
-  Map<String, Map<TimeSlot, List<String>>> calculateAvailability(
-      List<MemberAvailability> members) {
-    Map<String, Map<TimeSlot, List<String>>> availabilityMap = {};
+  String _formatDuration(Duration duration) {
+    String twoDigits(int n) => n.toString();
 
-    for (var member in members) {
-      for (var timeSlot in member.timeSlots) {
-        availabilityMap.putIfAbsent(timeSlot.day, () => {});
-        var daySlots = availabilityMap[timeSlot.day]!;
+    String hours = twoDigits(duration.inHours);
+    String minutes = twoDigits(duration.inMinutes.remainder(60));
 
-        for (var currentSlot in daySlots.keys) {
-          if (timeSlot.startTime.inMinutes < currentSlot.endTime.inMinutes &&
-              timeSlot.endTime.inMinutes > currentSlot.startTime.inMinutes) {
-            daySlots[currentSlot]!.add(member.name);
+    List<String> parts = [];
+    if (duration.inHours > 0) {
+      parts.add('$hours hour${duration.inHours > 1 ? 's' : ''}');
+    }
+    if (duration.inMinutes.remainder(60) > 0) {
+      parts.add(
+          '$minutes minute${duration.inMinutes.remainder(60) > 1 ? 's' : ''}');
+    }
+
+    return parts.join(', ');
+  }
+
+  Map<String, Map<TimeSlot, Map<String, Duration>>> calculateAvailability(
+      Map<String, List<TimeSlot>> daySlotsMap) {
+    // Final map to store availability information
+    Map<String, Map<TimeSlot, Map<String, Duration>>> availabilityMap = {};
+
+    // Iterate through each day's slots
+    for (var dayEntry in daySlotsMap.entries) {
+      String day = dayEntry.key;
+      List<TimeSlot> timeSlotList = dayEntry.value;
+
+      // Initialize the availability map for this day
+      availabilityMap.putIfAbsent(day, () => {});
+
+      // Compare each slot with every other slot for overlaps
+      for (int i = 0; i < timeSlotList.length; i++) {
+        TimeSlot slot1 = timeSlotList[i];
+
+        // Initialize the current slot with the member who owns it
+        availabilityMap[day]!.putIfAbsent(slot1, () => {});
+
+        // Store the member and their overlap duration
+        availabilityMap[day]![slot1]![slot1.memberName] =
+            slot1.endTime - slot1.startTime;
+
+        for (int j = 0; j < timeSlotList.length; j++) {
+          if (i == j) continue; // Skip comparing the same slot
+
+          TimeSlot slot2 = timeSlotList[j];
+
+          // Check if the two slots overlap
+          Duration overlap = _slotsOverlap(slot1, slot2);
+          if (overlap != Duration.zero) {
+            // Add slot2's member to slot1's list if not already present
+            Map<String, Duration> slot1Members = availabilityMap[day]![slot1]!;
+            if (!slot1Members.containsKey(slot2.memberName)) {
+              slot1Members[slot2.memberName] =
+                  Duration.zero; // Initialize duration
+            }
+            // Update the overlap duration
+            slot1Members[slot2.memberName] = overlap;
           }
-        }
-
-        if (!daySlots.containsKey(timeSlot)) {
-          daySlots[timeSlot] = [member.name];
         }
       }
     }
 
     return availabilityMap;
   }
+
+  int _calculateTotalMembers(Map<String, List<TimeSlot>> daySlotsMap) {
+    // Use a Set to collect unique member names
+    Set<String> uniqueMembers = {};
+
+    // Iterate through each day's slots
+    for (var dayEntry in daySlotsMap.entries) {
+      List<TimeSlot> timeSlotList = dayEntry.value;
+
+      // Iterate through the time slots to collect unique member names
+      for (var timeSlot in timeSlotList) {
+        uniqueMembers.add(timeSlot.memberName);
+      }
+    }
+
+    // Return the total number of unique members
+    return uniqueMembers.length;
+  }
+}
+
+Duration _slotsOverlap(TimeSlot slot1, TimeSlot slot2) {
+  // If both slots are the same
+  if (slot1.startTime == slot2.startTime && slot1.endTime == slot2.endTime) {
+    return slot1.endTime - slot1.startTime;
+  }
+
+  // Check if there's an intersection at all
+  if ((slot1.endTime > slot2.startTime && slot1.startTime < slot2.endTime) ||
+      (slot2.endTime > slot1.startTime && slot2.startTime < slot1.endTime)) {
+    // Case 1: One slot is completely inside the other
+    if (slot1.startTime > slot2.startTime && slot1.endTime < slot2.endTime) {
+      return (slot1.endTime - slot1.startTime);
+    } else if (slot2.startTime < slot1.startTime &&
+        slot2.endTime > slot1.endTime) {
+      return (slot2.endTime - slot2.startTime);
+    }
+
+    // Case 2: Partial overlap
+    if (slot2.endTime >= slot1.endTime) {
+      // Slot2 comes after Slot1
+      return (slot2.startTime - slot1.endTime).abs();
+    } else {
+      // Slot1 comes after Slot2
+      return (slot2.endTime - slot1.startTime).abs();
+    }
+  }
+
+  // No overlap, return a zero duration
+  return Duration.zero;
 }
 
 class ArcPainter extends CustomPainter {
@@ -309,13 +418,7 @@ class TimeSlot {
   final String day;
   final Duration startTime;
   final Duration endTime;
+  final String memberName; // Add the member's name
 
-  TimeSlot(this.day, this.startTime, this.endTime);
-}
-
-class MemberAvailability {
-  final String name;
-  final List<TimeSlot> timeSlots;
-
-  MemberAvailability(this.name, this.timeSlots);
+  TimeSlot(this.day, this.startTime, this.endTime, this.memberName);
 }
