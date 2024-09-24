@@ -399,6 +399,17 @@ class ArcPainter extends CustomPainter {
       double endY = centerY + radius * sin(angle);
       canvas.drawLine(Offset(startX, startY), Offset(endX, endY), tickPaint);
     }
+
+    // Calculate the proportion of the duration before 6 PM
+    double proportionBefore6PM =
+        _calculateDaytimeProportion(startTime, endTime);
+
+    // Draw sun or star in the center of the clock
+    if (proportionBefore6PM > 0.5) {
+      _drawSun(canvas, centerX, centerY);
+    } else {
+      _drawStar(canvas, centerX, centerY);
+    }
   }
 
   double _getRadians(Duration time) {
@@ -406,6 +417,80 @@ class ArcPainter extends CustomPainter {
     double minutes = time.inMinutes.remainder(60) / 60;
     double totalHours = hours + minutes;
     return (totalHours / 12) * (2 * pi) - pi / 2; // Convert to radians
+  }
+
+  double _calculateDaytimeProportion(Duration startTime, Duration endTime) {
+    Duration sixAM = const Duration(hours: 6);
+    Duration sixPM = const Duration(hours: 18);
+
+    // Find overlap with daytime (6 AM to 6 PM)
+    Duration overlapStart = startTime < sixAM ? sixAM : startTime;
+    Duration overlapEnd = endTime > sixPM ? sixPM : endTime;
+
+    if (overlapStart >= overlapEnd) {
+      return 0.0; // No overlap with daytime
+    }
+
+    Duration totalDuration = endTime - startTime;
+    Duration daytimeDuration = overlapEnd - overlapStart;
+
+    return daytimeDuration.inMinutes / totalDuration.inMinutes;
+  }
+
+  void _drawSun(Canvas canvas, double centerX, double centerY) {
+    Paint sunPaint = Paint()
+      ..color = Colors.yellow
+      ..style = PaintingStyle.fill;
+
+    // Draw the sun (a circle in the center)
+    canvas.drawCircle(Offset(centerX, centerY), 20, sunPaint);
+  }
+
+  void _drawStar(Canvas canvas, double centerX, double centerY) {
+    Paint starPaint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.fill;
+
+    // Star size
+    double starSize = 12.0;
+
+    Path starPath = Path();
+
+    // Move to the top point
+    starPath.moveTo(centerX, centerY - starSize);
+
+    // Draw the right side with a deeper inward curve
+    starPath.quadraticBezierTo(
+      centerX + starSize / 3,
+      centerY - starSize / 3, // Control point (closer to center)
+      centerX + starSize, centerY, // End point (right point)
+    );
+
+    // Draw the bottom side with a deeper inward curve
+    starPath.quadraticBezierTo(
+      centerX + starSize / 3,
+      centerY + starSize / 3, // Control point (closer to center)
+      centerX, centerY + starSize, // End point (bottom point)
+    );
+
+    // Draw the left side with a deeper inward curve
+    starPath.quadraticBezierTo(
+      centerX - starSize / 3,
+      centerY + starSize / 3, // Control point (closer to center)
+      centerX - starSize, centerY, // End point (left point)
+    );
+
+    // Draw the top side with a deeper inward curve
+    starPath.quadraticBezierTo(
+      centerX - starSize / 3,
+      centerY - starSize / 3, // Control point (closer to center)
+      centerX, centerY - starSize, // End point (top point)
+    );
+
+    starPath.close();
+
+    // Draw the star with curved sides
+    canvas.drawPath(starPath, starPaint);
   }
 
   @override
